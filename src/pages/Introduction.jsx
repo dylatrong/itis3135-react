@@ -1,4 +1,5 @@
 function Introduction() {
+    document.title = "Introduction - ITIS 3135";
     return (
         <main>
             <h2>Introduction</h2>

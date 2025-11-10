@@ -1,4 +1,5 @@
 function Home() {
+    document.title = "Home - ITIS 3135";
     return (
         <main>
             <h2>Home</h2>

@@ -1,4 +1,5 @@
 function Contract() {
+    document.title = "Course Contract - ITIS 3135";
     return (
         <main>
             <h2>Course Contract</h2>
