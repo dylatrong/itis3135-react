@@ -7,7 +7,8 @@ function Header() {
             <nav>
                 <Link to="/">Home</Link> |
                 <Link to="/introduction">Introduction</Link> |
-                <Link to="/contract">Contract</Link>
+                <Link to="/contract">Contract</Link> |
+                <Link to="/students">Student List</Link>
                 {/* The rest of the links are omitted as per assignment instructions */}
             </nav>
         </header>
