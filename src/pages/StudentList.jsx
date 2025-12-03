@@ -16,17 +16,27 @@ function StudentList() {
                 return response.json();
             })
             .then(data => {
-                setStudents(data);
+                // SAFETY CHECK: Ensure data is actually an array before setting state
+                if (Array.isArray(data)) {
+                    setStudents(data);
+                } else {
+                    console.error("API returned non-array data:", data);
+                    setStudents([]); // Set to empty list to prevent crash
+                }
                 setLoading(false);
             })
             .catch(error => {
                 console.error("Error fetching data:", error);
+                setStudents([]); // Ensure it's a list even on error
                 setLoading(false);
             });
     }, []);
 
+    // SAFETY CHECK: Ensure students is an array before filtering
+    const safeStudents = Array.isArray(students) ? students : [];
+
     // Filter students based on search term
-    const filteredStudents = students.filter(student => 
+    const filteredStudents = safeStudents.filter(student => 
         (student.name && student.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (student.intro && student.intro.toLowerCase().includes(searchTerm.toLowerCase()))
     );
@@ -59,22 +69,26 @@ function StudentList() {
                 <p>Loading student data...</p>
             ) : (
                 <div className="student-grid">
-                    {filteredStudents.map((student, index) => (
-                        <div key={index} className="student-card">
-                            {/* Display Name */}
-                            <h3 style={{ color: '#58a6ff', marginTop: 0 }}>
-                                {student.name || "Anonymous"}
-                            </h3>
-                            
-                            {/* Display Introduction */}
-                            <p>{student.intro || "No introduction provided."}</p>
-                            
-                            {/* Display Date (if available) */}
-                            {student.date && (
-                                <small style={{ color: '#8b949e' }}>Submitted: {student.date}</small>
-                            )}
-                        </div>
-                    ))}
+                    {filteredStudents.length > 0 ? (
+                        filteredStudents.map((student, index) => (
+                            <div key={index} className="student-card">
+                                {/* Display Name */}
+                                <h3 style={{ color: '#58a6ff', marginTop: 0 }}>
+                                    {student.name || "Anonymous"}
+                                </h3>
+                                
+                                {/* Display Introduction */}
+                                <p>{student.intro || "No introduction provided."}</p>
+                                
+                                {/* Display Date (if available) */}
+                                {student.date && (
+                                    <small style={{ color: '#8b949e' }}>Submitted: {student.date}</small>
+                                )}
+                            </div>
+                        ))
+                    ) : (
+                        <p>No students found.</p>
+                    )}
                 </div>
             )}
         </main>
