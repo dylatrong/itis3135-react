@@ -1,15 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+
+// Define the initial state for the filtering checkboxes
+const initialFilterCriteria = {
+    name: true,
+    mascot: true,
+    image: true,
+    personalStatement: true,
+    backgrounds: true,
+    classes: true, // Now controls display of the 'courses' array
+    extraInfo: true, // Computer, Fun Fact, etc.
+    quote: true,
+    links: true,
+};
 
 function StudentList() {
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [searchTerm, setSearchTerm] = useState("");
-    
-    // New state to track which student card is currently expanded (by prefix)
-    const [expandedPrefix, setExpandedPrefix] = useState(null);
+    const [currentStudentIndex, setCurrentStudentIndex] = useState(0);
+    const [filterCriteria, setFilterCriteria] = useState(initialFilterCriteria);
 
     useEffect(() => {
+        // Fetches data from the API
         fetch('https://dvonb.xyz/api/2025-fall/itis-3135/students?full=1')
             .then(response => {
                 if (!response.ok) {
@@ -19,7 +32,7 @@ function StudentList() {
             })
             .then(data => {
                 if (Array.isArray(data)) {
-                    setStudents(data);
+                    setStudents(data.filter(s => s && s.name)); // Filter out null/bad entries
                 } else {
                     console.error("API Error: Data is not an array", data);
                     setError("Received invalid data format from server.");
@@ -37,52 +50,106 @@ function StudentList() {
     const getStudentName = (student) => {
         if (!student || !student.name) return "Anonymous";
         
-        // If it's the object format: { first: "Name", last: "..." }
         if (typeof student.name === 'object') {
             const first = student.name.first || "";
             const last = student.name.last || "";
             return `${first} ${last}`.trim() || "Anonymous";
         }
         
-        // Fallback if it happens to be a string
         return String(student.name);
     };
 
-    const toggleExpand = (prefix) => {
-        // Toggle: if clicking the same one, close it (null). Otherwise, open the new one.
-        setExpandedPrefix(expandedPrefix === prefix ? null : prefix);
+    // Filters students based on the search term (memoized for performance)
+    const visibleStudents = useMemo(() => {
+        const term = searchTerm.toLowerCase();
+        
+        const filtered = students.filter(student => {
+            if (!student) return false;
+            
+            const nameStr = getStudentName(student).toLowerCase();
+            // Search by name (first/last)
+            return nameStr.includes(term);
+        });
+
+        // Reset the index if the filtered list changes
+        if (filtered.length > 0 && currentStudentIndex >= filtered.length) {
+            setCurrentStudentIndex(0);
+        } else if (filtered.length === 0) {
+            setCurrentStudentIndex(0);
+        }
+
+        return filtered;
+    }, [students, searchTerm]);
+
+
+    // Handlers for the slideshow navigation
+    const handleNext = () => {
+        setCurrentStudentIndex((prevIndex) => 
+            (prevIndex + 1) % visibleStudents.length
+        );
     };
 
-    const filteredStudents = students.filter(student => {
-        if (!student) return false;
-        
-        const term = searchTerm.toLowerCase();
-        const nameStr = getStudentName(student).toLowerCase();
-        // The API uses "personalStatement" for the bio
-        const bioStr = (student.personalStatement || "").toLowerCase();
-        
-        return nameStr.includes(term) || bioStr.includes(term);
-    });
+    const handlePrev = () => {
+        setCurrentStudentIndex((prevIndex) => 
+            (prevIndex - 1 + visibleStudents.length) % visibleStudents.length
+        );
+    };
 
+    // Handler for checkbox changes
+    const handleFilterChange = (criteriaKey) => {
+        setFilterCriteria(prevCriteria => ({
+            ...prevCriteria,
+            [criteriaKey]: !prevCriteria[criteriaKey],
+        }));
+    };
+
+    // Display error state
     if (error) {
         return (
-            <main style={{ padding: "20px", color: "red" }}>
+            <main style={{ padding: "20px", color: "red", backgroundColor: '#0d1117' }}>
                 <h2>Error Loading Students</h2>
                 <p>{error}</p>
                 <button onClick={() => window.location.reload()}>Try Again</button>
             </main>
         );
     }
+    
+    // Display loading state
+    if (loading) {
+        return (
+            <main style={{ padding: "20px", backgroundColor: '#0d1117', color: '#c9d1d9' }}>
+                <p>Loading student data...</p>
+            </main>
+        );
+    }
+
+    // Get the student object currently displayed in the slideshow
+    const currentStudent = visibleStudents[currentStudentIndex];
+    const studentCount = visibleStudents.length;
+
 
     return (
-        <main>
-            <h2>Student Introductions</h2>
-            <p>Classmates from ITIS 3135. Click on a student to see more details.</p>
+        <main style={{ padding: "20px", backgroundColor: '#0d1117', color: '#c9d1d9', minHeight: '100vh' }}>
+            <h2 style={{ color: '#58a6ff' }}>Student Introductions Slideshow 🎓</h2>
 
-            <div style={{ marginBottom: '20px' }}>
+            {/* --- COUNTER & SEARCH --- */}
+            <div style={{ marginBottom: '20px', padding: '15px', border: '1px solid #30363d', borderRadius: '5px' }}>
+                <h3 style={{ marginTop: 0, color: '#79c0ff' }}>Search & Count</h3>
+                
+                {/* COUNTER */}
+                <p>
+                    **Students Found:** **{studentCount}**
+                    {studentCount > 0 && (
+                        <span style={{ marginLeft: '10px', fontSize: '0.9em', color: '#8b949e' }}>
+                            (Showing {currentStudentIndex + 1} of {studentCount})
+                        </span>
+                    )}
+                </p>
+
+                {/* SEARCH INPUT */}
                 <input 
                     type="text" 
-                    placeholder="Search for a student..." 
+                    placeholder="Search students by name (first or last)..." 
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     style={{
@@ -90,159 +157,212 @@ function StudentList() {
                         width: '100%',
                         maxWidth: '400px',
                         borderRadius: '5px',
-                        border: '1px solid #30363d',
+                        border: '1px solid #58a6ff',
                         backgroundColor: '#0d1117',
                         color: '#c9d1d9'
                     }}
                 />
             </div>
-
-            {loading ? (
-                <p>Loading student data...</p>
-            ) : (
-                <div className="student-grid">
-                    {filteredStudents.length > 0 ? (
-                        filteredStudents.map((student, index) => {
-                            if (!student) return null;
-                            const isExpanded = expandedPrefix === student.prefix;
-                            
-                            return (
-                                <div 
-                                    key={index} 
-                                    className="student-card"
-                                    onClick={() => toggleExpand(student.prefix)}
-                                    style={{ cursor: 'pointer' }} // Show it's clickable
-                                >
-                                    {/* IMAGE SECTION */}
-                                    {student.media && student.media.src && (
-                                        <div style={{ marginBottom: '15px', textAlign: 'center' }}>
-                                            <img 
-                                                src={`https://dvonb.xyz${student.media.src}`} 
-                                                alt={`${getStudentName(student)}`}
-                                                style={{
-                                                    maxWidth: '100%',
-                                                    maxHeight: '200px',
-                                                    borderRadius: '4px',
-                                                    objectFit: 'cover'
-                                                }}
-                                                onError={(e) => {
-                                                    e.target.style.display = 'none'; // Hide if image fails
-                                                }}
-                                            />
-                                            {student.media.caption && (
-                                                <p style={{ fontSize: '0.8em', color: '#8b949e', fontStyle: 'italic' }}>
-                                                    {student.media.caption}
-                                                </p>
-                                            )}
-                                        </div>
-                                    )}
-
-                                    <h3 style={{ color: '#58a6ff', marginTop: 0 }}>
-                                        {getStudentName(student)}
-                                    </h3>
-                                    
-                                    {/* MASCOT */}
-                                    {student.mascot && (
-                                        <p style={{ color: '#79c0ff', fontSize: '0.9em' }}>
-                                            <strong>Mascot:</strong> {student.mascot}
-                                        </p>
-                                    )}
-
-                                    {/* INTRODUCTION (Teaser or Full) */}
-                                    <p>
-                                        {student.personalStatement || "No introduction provided."}
-                                    </p>
-
-                                    {/* EXPANDED CONTENT */}
-                                    {isExpanded && (
-                                        <div style={{ 
-                                            marginTop: '15px', 
-                                            paddingTop: '15px', 
-                                            borderTop: '1px solid #30363d',
-                                            animation: 'fadeIn 0.3s' 
-                                        }}>
-                                            {/* Quote */}
-                                            {student.quote && (student.quote.text || student.quote.author) && (
-                                                <blockquote style={{ 
-                                                    borderLeft: '3px solid #58a6ff', 
-                                                    margin: '10px 0', 
-                                                    paddingLeft: '10px', 
-                                                    fontStyle: 'italic',
-                                                    color: '#c9d1d9'
-                                                }}>
-                                                    "{student.quote.text}" 
-                                                    {student.quote.author && <span style={{ display: 'block', fontSize: '0.8em', marginTop: '5px' }}>— {student.quote.author}</span>}
-                                                </blockquote>
-                                            )}
-
-                                            {/* Fun Fact */}
-                                            {student.funFact && (
-                                                <p><strong>Fun Fact:</strong> {student.funFact}</p>
-                                            )}
-
-                                            {/* Backgrounds */}
-                                            {student.backgrounds && (
-                                                <div style={{ fontSize: '0.9em', color: '#8b949e', marginTop: '10px' }}>
-                                                    {student.backgrounds.academic && <p><strong>Academic:</strong> {student.backgrounds.academic}</p>}
-                                                    {student.backgrounds.professional && <p><strong>Professional:</strong> {student.backgrounds.professional}</p>}
-                                                </div>
-                                            )}
-
-                                            {/* Links */}
-                                            {student.links && Object.keys(student.links).length > 0 && (
-                                                <div style={{ marginTop: '15px' }}>
-                                                    <strong>Links:</strong><br/>
-                                                    {Object.entries(student.links).map(([key, url]) => (
-                                                        url ? (
-                                                            <a 
-                                                                key={key} 
-                                                                href={url} 
-                                                                target="_blank" 
-                                                                rel="noopener noreferrer"
-                                                                style={{ 
-                                                                    display: 'inline-block', 
-                                                                    marginRight: '10px', 
-                                                                    color: '#58a6ff',
-                                                                    textTransform: 'capitalize' 
-                                                                }}
-                                                                onClick={(e) => e.stopPropagation()} // Prevent card click when clicking link
-                                                            >
-                                                                {key}
-                                                            </a>
-                                                        ) : null
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                    
-                                    {/* CLICK INDICATOR */}
-                                    <div style={{ marginTop: '15px', textAlign: 'center', fontSize: '0.8em', color: '#58a6ff' }}>
-                                        {isExpanded ? "Show Less ▲" : "Show More ▼"}
-                                    </div>
-
-                                    {/* DATE */}
-                                    {student.acknowledgementDate && (
-                                        <small style={{ color: '#8b949e', display: 'block', marginTop: '10px' }}>
-                                            Submitted: {student.acknowledgementDate}
-                                        </small>
-                                    )}
-                                </div>
-                            );
-                        })
-                    ) : (
-                        <p>No students found matching "{searchTerm}".</p>
-                    )}
+            
+            {/* --- CHECKBOX FILTER CONTROLS --- */}
+            <div style={{ marginBottom: '20px', padding: '15px', border: '1px solid #30363d', borderRadius: '5px' }}>
+                <h3 style={{ marginTop: 0, color: '#79c0ff' }}>Display Filters</h3>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '15px' }}>
+                    {Object.keys(initialFilterCriteria).map(key => (
+                        <label key={key} style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={filterCriteria[key]}
+                                onChange={() => handleFilterChange(key)}
+                                style={{ marginRight: '5px' }}
+                            />
+                            {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+                        </label>
+                    ))}
                 </div>
-            )}
-            <style>{`
-                @keyframes fadeIn {
-                    from { opacity: 0; transform: translateY(-5px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-            `}</style>
+            </div>
+
+            {/* --- SLIDESHOW DISPLAY --- */}
+            <div className="slideshow-container" style={{ textAlign: 'center' }}>
+                {studentCount > 0 ? (
+                    <div className="student-card" style={{ 
+                        border: '1px solid #58a6ff', 
+                        padding: '20px', 
+                        borderRadius: '8px', 
+                        margin: '20px auto',
+                        maxWidth: '600px',
+                        textAlign: 'left',
+                        backgroundColor: '#161b22',
+                        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.5)'
+                    }}>
+                        
+                        {/* NAME */}
+                        {filterCriteria.name && (
+                            <h3 style={{ color: '#58a6ff', marginTop: 0, textAlign: 'center' }}>
+                                {getStudentName(currentStudent)}
+                            </h3>
+                        )}
+
+                        {/* IMAGE */}
+                        {filterCriteria.image && currentStudent.media && currentStudent.media.src && (
+                            <div style={{ marginBottom: '15px', textAlign: 'center' }}>
+                                <img 
+                                    src={`https://dvonb.xyz${currentStudent.media.src}`} 
+                                    alt={`${getStudentName(currentStudent)}`}
+                                    style={{
+                                        maxWidth: '100%',
+                                        maxHeight: '250px',
+                                        borderRadius: '4px',
+                                        objectFit: 'cover'
+                                    }}
+                                    onError={(e) => {
+                                        e.target.style.display = 'none';
+                                    }}
+                                />
+                                {currentStudent.media.caption && (
+                                    <p style={{ fontSize: '0.8em', color: '#8b949e', fontStyle: 'italic' }}>
+                                        {currentStudent.media.caption}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {/* MASCOT */}
+                        {filterCriteria.mascot && currentStudent.mascot && (
+                            <p style={{ color: '#79c0ff', fontSize: '0.9em' }}>
+                                <strong>Mascot:</strong> {currentStudent.mascot}
+                            </p>
+                        )}
+                        
+                        {/* PERSONAL STATEMENT */}
+                        {filterCriteria.personalStatement && (
+                            <div>
+                                <p style={{ fontWeight: 'bold' }}>Personal Statement:</p>
+                                <p style={{ paddingLeft: '10px' }}>
+                                    {currentStudent.personalStatement || "No personal statement provided."}
+                                </p>
+                            </div>
+                        )}
+                        
+                        {/* BACKGROUNDS */}
+                        {filterCriteria.backgrounds && currentStudent.backgrounds && (
+                            <div style={{ fontSize: '0.9em', color: '#c9d1d9', marginTop: '10px', borderLeft: '3px solid #79c0ff', paddingLeft: '10px' }}>
+                                <p style={{ fontWeight: 'bold', margin: '0 0 5px 0' }}>Backgrounds:</p>
+                                {currentStudent.backgrounds.academic && <p style={{ margin: 0 }}><strong>Academic:</strong> {currentStudent.backgrounds.academic}</p>}
+                                {currentStudent.backgrounds.professional && <p style={{ margin: 0 }}><strong>Professional:</strong> {currentStudent.backgrounds.professional}</p>}
+                            </div>
+                        )}
+                        
+                        {/* CLASSES (Using the 'courses' array from the API) */}
+                        {filterCriteria.classes && currentStudent.courses && currentStudent.courses.length > 0 && (
+                            <div style={{ marginTop: '15px', borderLeft: '3px solid #f08080', paddingLeft: '10px' }}>
+                                <p style={{ fontWeight: 'bold', margin: '0 0 5px 0' }}>Courses Enrolled:</p>
+                                <ul style={{ listStyleType: 'disc', paddingLeft: '20px', margin: 0 }}>
+                                    {currentStudent.courses.map((course, index) => (
+                                        <li key={index} style={{ marginBottom: '5px' }}>
+                                            **{course.code || `${course.dept} ${course.num}`}**: {course.name}
+                                            {course.reason && (
+                                                <span style={{ display: 'block', fontSize: '0.8em', color: '#8b949e', fontStyle: 'italic' }}>
+                                                    (Reason: {course.reason})
+                                                </span>
+                                            )}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+                        {/* Fallback for Classes/Courses */}
+                        {filterCriteria.classes && (!currentStudent.courses || currentStudent.courses.length === 0) && (
+                            <div style={{ marginTop: '15px', borderLeft: '3px solid #f08080', paddingLeft: '10px' }}>
+                                <p style={{ fontStyle: 'italic', color: '#8b949e' }}>
+                                    No specific course list was provided by this student.
+                                </p>
+                            </div>
+                        )}
+                        
+                        {/* QUOTE */}
+                        {filterCriteria.quote && currentStudent.quote && (currentStudent.quote.text || currentStudent.quote.author) && (
+                            <blockquote style={{ 
+                                borderLeft: '3px solid #58a6ff', 
+                                margin: '15px 0', 
+                                paddingLeft: '10px', 
+                                fontStyle: 'italic',
+                                color: '#c9d1d9'
+                            }}>
+                                "{currentStudent.quote.text || "No quote text."}" 
+                                {currentStudent.quote.author && <span style={{ display: 'block', fontSize: '0.8em', marginTop: '5px' }}>— {currentStudent.quote.author}</span>}
+                            </blockquote>
+                        )}
+
+                        {/* EXTRA INFO (Fun Fact is the main one available) */}
+                        {filterCriteria.extraInfo && currentStudent.funFact && (
+                            <p style={{ marginTop: '15px' }}>
+                                <strong>Fun Fact:</strong> {currentStudent.funFact}
+                            </p>
+                        )}
+                        
+                        {/* LINKS */}
+                        {filterCriteria.links && currentStudent.links && Object.keys(currentStudent.links).length > 0 && (
+                            <div style={{ marginTop: '15px', paddingTop: '10px', borderTop: '1px dashed #30363d' }}>
+                                <strong>Links:</strong><br/>
+                                {Object.entries(currentStudent.links).map(([key, url]) => (
+                                    url ? (
+                                        <a 
+                                            key={key} 
+                                            href={url} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer"
+                                            style={{ 
+                                                display: 'inline-block', 
+                                                marginRight: '10px', 
+                                                color: '#58a6ff',
+                                                textTransform: 'capitalize' 
+                                            }}
+                                        >
+                                            {key}
+                                        </a>
+                                    ) : null
+                                ))}
+                            </div>
+                        )}
+
+                    </div>
+                ) : (
+                    <p>No students found matching your search criteria.</p>
+                )}
+
+                {/* SLIDESHOW NAVIGATION BUTTONS */}
+                <div className="slideshow-buttons" style={{ marginTop: '20px' }}>
+                    <button 
+                        onClick={handlePrev} 
+                        disabled={studentCount <= 1}
+                        style={{ ...buttonStyle, marginRight: '10px' }}
+                    >
+                        &lt; Previous
+                    </button>
+                    <button 
+                        onClick={handleNext} 
+                        disabled={studentCount <= 1}
+                        style={buttonStyle}
+                    >
+                        Next &gt;
+                    </button>
+                </div>
+            </div>
         </main>
     );
 }
+
+// Basic style for the navigation buttons
+const buttonStyle = {
+    padding: '10px 20px',
+    backgroundColor: '#238636',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontWeight: 'bold',
+    transition: 'background-color 0.2s',
+};
 
 export default StudentList;
